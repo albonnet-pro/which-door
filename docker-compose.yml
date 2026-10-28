@@ -1,0 +1,49 @@
+# Stack Portainer : "Y'a quoi derrière la porte ?"
+# Le réseau "web" doit exister (docker network create web).
+services:
+  app:
+    build: .
+    image: which-door:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-whichdoor}:${MYSQL_PASSWORD:-change-me}@db:3306/${MYSQL_DATABASE:-whichdoor}
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-500}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - web
+      - internal
+    # Décommenter pour exposer directement le port (sans reverse proxy)
+    # ports:
+    #   - "3000:3000"
+
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-whichdoor}
+      MYSQL_USER: ${MYSQL_USER:-whichdoor}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - internal
+
+volumes:
+  db-data:
+  uploads:
+
+networks:
+  web:
+    external: true
+  internal:
