@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import { dbConfig } from "./config";
 import { seed } from "./seed";
 
 // Migrations versionnées, appliquées dans l'ordre au démarrage du serveur.
@@ -51,10 +52,10 @@ const migrations: { id: number; sql: string }[] = [
   },
 ];
 
-async function connectWithRetry(url: string, attempts = 30) {
+async function connectWithRetry(config: mysql.ConnectionOptions, attempts = 30) {
   for (let i = 1; ; i++) {
     try {
-      return await mysql.createConnection({ uri: url, multipleStatements: true });
+      return await mysql.createConnection({ ...config, multipleStatements: true });
     } catch (error) {
       if (i >= attempts) throw error;
       console.log(`[db] MySQL indisponible, nouvelle tentative (${i}/${attempts})…`);
@@ -64,13 +65,13 @@ async function connectWithRetry(url: string, attempts = 30) {
 }
 
 export async function migrate() {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    console.warn("[db] DATABASE_URL absent, migrations ignorées");
+  const config = dbConfig();
+  if (!config) {
+    console.warn("[db] Connexion MySQL non configurée, migrations ignorées");
     return;
   }
 
-  const conn = await connectWithRetry(url);
+  const conn = await connectWithRetry(config);
   try {
     await conn.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (

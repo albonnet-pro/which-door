@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Door } from "@/components/door";
 import type { Door as DoorRow } from "@/db/schema";
 import type { RoundWithDoors } from "@/lib/queries";
@@ -56,6 +56,7 @@ export function Game({ rounds }: { rounds: RoundWithDoors[] }) {
   }
 
   function next() {
+    setReplay(null);
     setIndex((i) => i + 1);
     setPhase("choose");
     setChosen(null);
@@ -79,36 +80,51 @@ export function Game({ rounds }: { rounds: RoundWithDoors[] }) {
 
       <h1 className="mb-2 text-center font-display text-3xl font-extrabold text-balance sm:text-5xl">{round.title}</h1>
       <p className="mb-8 text-center text-muted">
-        {phase === "choose" ? "Choisis une porte." : phase === "result" ? "Le verdict est tombé." : "Ouverture…"}
+        {phase === "choose"
+          ? "Choisis une porte."
+          : phase === "video"
+            ? "Regarde ce qu'il y avait derrière…"
+            : phase === "result"
+              ? "Le verdict est tombé."
+              : "Ouverture…"}
       </p>
 
       {isResult && <Verdict won={won} />}
 
-      <div key={round.id} className="mx-auto grid w-full max-w-2xl grid-cols-2 gap-4 sm:gap-10">
-        {(["left", "right"] as const).map((side, i) => {
-          const door = round[side];
-          return (
-            <Door
-              key={side}
-              number={(i + 1) as 1 | 2}
-              label={door.label}
-              description={door.description}
-              color={door.color}
-              open={isOpen(side)}
-              dimmed={isResult && side !== chosen}
-              disabled={phase !== "choose"}
-              onOpen={() => choose(side)}
-              behind={
-                <Behind
-                  door={door}
-                  bad={isResult ? round.badSide === side : null}
-                  percent={isResult ? percentFor(door, round, counts) : null}
-                />
-              }
-            />
-          );
-        })}
-      </div>
+      {phase === "video" && chosen && round[chosen].videoUrl ? (
+        <VideoStage
+          key={`${round.id}-${chosen}`}
+          door={round[chosen]}
+          mustFinish
+          onContinue={() => setPhase("result")}
+        />
+      ) : (
+        <div key={round.id} className="mx-auto grid w-full max-w-2xl grid-cols-2 gap-4 sm:gap-10">
+          {(["left", "right"] as const).map((side, i) => {
+            const door = round[side];
+            return (
+              <Door
+                key={side}
+                number={(i + 1) as 1 | 2}
+                label={door.label}
+                description={door.description}
+                color={door.color}
+                open={isOpen(side)}
+                dimmed={isResult && side !== chosen}
+                disabled={phase !== "choose"}
+                onOpen={() => choose(side)}
+                behind={
+                  <Behind
+                    door={door}
+                    bad={isResult ? round.badSide === side : null}
+                    percent={isResult ? percentFor(door, round, counts) : null}
+                  />
+                }
+              />
+            );
+          })}
+        </div>
+      )}
 
       {isResult && (
         <div className="mt-8 flex flex-col items-center gap-4 text-center">
@@ -140,15 +156,11 @@ export function Game({ rounds }: { rounds: RoundWithDoors[] }) {
         </div>
       )}
 
-      {phase === "video" && chosen && round[chosen].videoUrl && (
-        <VideoOverlay
-          key={`${round.id}-${chosen}`}
-          door={round[chosen]}
-          mustFinish
-          onContinue={() => setPhase("result")}
-        />
+      {isResult && replay?.videoUrl && (
+        <div className="mt-10">
+          <VideoStage key={replay.id} door={replay} onContinue={() => setReplay(null)} />
+        </div>
       )}
-      {replay?.videoUrl && <VideoOverlay key={replay.id} door={replay} onContinue={() => setReplay(null)} />}
     </div>
   );
 }
@@ -173,7 +185,7 @@ function Verdict({ won }: { won: boolean }) {
   );
 }
 
-function VideoOverlay({
+function VideoStage({
   door,
   mustFinish = false,
   onContinue,
@@ -185,33 +197,68 @@ function VideoOverlay({
   const [ended, setEnded] = useState(false);
   const [failed, setFailed] = useState(false);
   const canContinue = !mustFinish || ended || failed;
+  const [muted, setMuted] = useState(false);
+  const ref = useRef<HTMLElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // À l'affichage : amène la vidéo à l'écran (à nouveau quand ses dimensions sont connues) et la lance. Si le navigateur
+  // bloque la lecture avec le son, on la lance en muet (bouton pour réactiver).
+  const reveal = () => ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  useEffect(() => {
+    reveal();
+    const video = videoRef.current;
+    if (!video) return;
+    video.play().catch(() => {
+      video.muted = true;
+      setMuted(true);
+      video.play().catch(() => {});
+    });
+  }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-black/90 p-4 backdrop-blur-sm">
-      <p className="font-display text-xl font-bold text-balance text-center sm:text-2xl">
+    <section
+      ref={ref}
+      className="mx-auto flex w-full max-w-4xl scroll-m-4 flex-col items-center gap-5"
+    >
+      <p className="text-center font-display text-xl font-bold text-balance sm:text-2xl">
         Derrière la porte « {door.label} »
       </p>
       <video
+        ref={videoRef}
         src={door.videoUrl ?? undefined}
-        autoPlay
+        preload="auto"
         playsInline
         controls
         controlsList="nodownload noplaybackrate"
         disablePictureInPicture
+        onLoadedMetadata={reveal}
         onEnded={() => setEnded(true)}
         onError={() => setFailed(true)}
-        className="max-h-[70vh] w-full max-w-4xl rounded-xl bg-black shadow-2xl"
+        className="max-h-[min(70dvh,calc(100dvh-15rem))] w-auto max-w-full touch-pan-y rounded-xl bg-black shadow-2xl"
       />
+      {muted && (
+        <button
+          type="button"
+          onClick={() => {
+            if (videoRef.current) videoRef.current.muted = false;
+            setMuted(false);
+          }}
+          className="rounded-full border border-border px-5 py-2 text-sm hover:bg-surface"
+        >
+          🔇 Activer le son
+        </button>
+      )}
       {failed && <p className="text-danger">La vidéo n&apos;a pas pu être lue.</p>}
       <button
         type="button"
         onClick={onContinue}
         disabled={!canContinue}
-        className="rounded-full bg-accent px-10 py-3 font-display text-lg font-bold text-accent-ink transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted"
+        className="rounded-full bg-accent px-8 py-3 font-display text-lg font-bold whitespace-nowrap text-accent-ink transition hover:brightness-110 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted"
       >
-        {canContinue ? (mustFinish ? "Continuer →" : "Fermer") : "Regarde la vidéo jusqu'au bout…"}
+        {canContinue ? (mustFinish ? "Continuer →" : "Fermer la vidéo") : "Regarde jusqu'au bout…"}
       </button>
-    </div>
+    </section>
   );
 }
 

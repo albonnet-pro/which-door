@@ -6,7 +6,10 @@ services:
     image: which-door:latest
     restart: unless-stopped
     environment:
-      DATABASE_URL: mysql://${MYSQL_USER:-whichdoor}:${MYSQL_PASSWORD:-change-me}@db:3306/${MYSQL_DATABASE:-whichdoor}
+      DB_HOST: db
+      DB_USER: ${MYSQL_USER:-whichdoor}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      DB_NAME: ${MYSQL_DATABASE:-whichdoor}
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-500}
     volumes:
       - uploads:/app/uploads

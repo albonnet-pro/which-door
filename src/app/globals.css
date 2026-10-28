@@ -28,12 +28,12 @@
 
 html {
   color-scheme: dark;
+  /* Fond propre à <html> : sinon celui du body est propagé au canvas et répété toutes les 100vh */
+  background: var(--background);
 }
 
 body {
-  background:
-    radial-gradient(ellipse 60% 45% at 50% 0%, rgb(245 179 1 / 0.12), transparent 70%),
-    var(--background);
+  background: radial-gradient(ellipse 100% 600px at 50% 0%, rgb(245 179 1 / 0.12), transparent 70%) no-repeat;
   color: var(--foreground);
 }
 

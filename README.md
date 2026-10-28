@@ -21,7 +21,7 @@ Stack : Next.js 16 (App Router, Cache Components), React 19, Tailwind CSS 4, Dri
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d   # MySQL local sur le port 3306
-cp .env.example .env.local
+echo "DATABASE_URL=mysql://whichdoor:whichdoor@localhost:3306/whichdoor" > .env.local
 npm install
 npm run dev
 ```
